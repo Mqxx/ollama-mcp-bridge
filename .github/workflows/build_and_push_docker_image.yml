@@ -104,7 +104,7 @@ jobs:
           for arch in "${ARCHS[@]}"; do
             image_list="$image_list $IMAGE:${{ github.event.release.tag_name }}-$arch"
           done
-          image_list=$(echo $IMAGE_LIST | xargs)
+          image_list=$(echo $image_list | xargs)
 
           echo "\"$image_list\""
           
