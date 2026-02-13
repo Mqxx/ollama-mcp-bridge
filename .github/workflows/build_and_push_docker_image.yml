@@ -100,23 +100,25 @@ jobs:
       - name: 'Create and push multi-arch manifest'
         run: |
           MATRIX='${{ needs.build.outputs.matrix }}'
+          RELEASE_TAG='${{ github.event.release.tag_name }}'
+          OWNER_LOWERCASE=${GITHUB_REPOSITORY_OWNER,,}
           
-          IMAGES_SHA=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:{}-${{ github.sha }}")
-          IMAGES_TAG=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:{}-${{ github.event.release.tag_name }}")
-          IMAGES_LATEST=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:{}-latest")
+          IMAGES_SHA=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -I{} echo "ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:{}-${GITHUB_SHA}")
+          IMAGES_TAG=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -I{} echo "ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:{}-${RELEASE_TAG}")
+          IMAGES_LATEST=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -I{} echo "ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:{}-latest")
 
           echo "SHA images: $IMAGES_SHA"
           echo "TAG images: $IMAGES_TAG"
           echo "LATEST images: $IMAGES_LATEST"
           
-          docker manifest create ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.sha }} $IMAGES_SHA
-          docker manifest push ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.sha }}
-
-          docker manifest create ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.event.release.tag_name }} $IMAGES_TAG
-          docker manifest push ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.event.release.tag_name }}
-
-          docker manifest create ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:latest $IMAGES_LATEST
-          docker manifest push ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:latest
+          docker manifest create ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA} $IMAGES_SHA
+          docker manifest push ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}
+          
+          docker manifest create ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:${RELEASE_TAG} $IMAGES_TAG
+          docker manifest push ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:${RELEASE_TAG}
+          
+          docker manifest create ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:latest $IMAGES_LATEST
+          docker manifest push ghcr.io/${OWNER_LOWERCASE}/${DOCKER_IMAGE_NAME}:latest
           
     outputs:
       matrix: ${{ needs.build.outputs.matrix }}
