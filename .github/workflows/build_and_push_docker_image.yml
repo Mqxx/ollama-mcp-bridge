@@ -88,7 +88,7 @@ jobs:
 
       - name: Create and push manifests
         run: |
-          IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
 
           for TAG in ${{ steps.meta.outputs.version }} latest; do
             docker manifest create $IMAGE:$TAG \
@@ -106,5 +106,5 @@ jobs:
     steps:
       - name: 'Inspect latest manifest'
         run: |
-          IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:latest
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:latest"
           docker buildx imagetools inspect $IMAGE
