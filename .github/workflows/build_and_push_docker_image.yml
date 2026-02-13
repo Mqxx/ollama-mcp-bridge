@@ -13,6 +13,7 @@ env:
 
 jobs:
   build:
+    name: Build and Push ${{ matrix.arch }}
     strategy:
       matrix:
         include:
@@ -23,87 +24,75 @@ jobs:
             os: ubuntu-22.04-arm
             platform: linux/arm64
 
-    name: 'Build ${{ matrix.arch }}'
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: 'Checkout repository'
-        uses: actions/checkout@v4
-
-      - name: 'Docker registry login'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 'Docker metadata'
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha
-            type=ref,event=tag
-            type=raw,value=latest
-
-      - name: 'Build & Push arch image'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: true
-          labels: ${{ steps.meta.outputs.labels }}
-          tags: |
-            ${{ steps.meta.outputs.tags }}-${{ matrix.arch }}
-
-  manifest:
-    name: 'Manifest'
-    needs: [build]
-    runs-on: ubuntu-22.04
 
     permissions:
       contents: read
       packages: write
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase owner
+        id: owner
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 'Docker metadata'
-        id: meta
-        uses: docker/metadata-action@v5
+      # Build arch-specific images
+      - name: Build & Push arch image
+        uses: docker/build-push-action@v6
         with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
           tags: |
-            type=sha
-            type=ref,event=tag
-            type=raw,value=latest
+            ghcr.io/${{ steps.owner.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-${{ matrix.arch }}
+            ghcr.io/${{ steps.owner.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}-${{ matrix.arch }}
+            ghcr.io/${{ steps.owner.outputs.owner }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
 
-      - name: 'Create multi-arch manifests'
-        run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
-          
-          docker buildx imagetools create \
-            --tag $IMAGE:latest \
-            $IMAGE:amd64-latest \
-            $IMAGE:arm64-latest
-            
-          docker buildx imagetools push $IMAGE:latest
-
-  verify:
-    name: 'Verify'
-    needs: [manifest]
+  manifest:
+    name: Create Multi-Arch Manifests
+    needs: build
     runs-on: ubuntu-22.04
 
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      - name: 'Inspect latest manifest'
+      - name: Lowercase owner
+        id: owner
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Multi-Arch manifests
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:latest"
-          docker buildx imagetools inspect $IMAGE
+          IMAGE=ghcr.io/${{ steps.owner.outputs.owner }}/${IMAGE_NAME}
+
+          # SHA manifest
+          docker manifest create $IMAGE:${GITHUB_SHA} \
+            --amend $IMAGE:${GITHUB_SHA}-amd64 \
+            --amend $IMAGE:${GITHUB_SHA}-arm64
+          docker manifest push $IMAGE:${GITHUB_SHA}
+
+          # Release tag manifest
+          docker manifest create $IMAGE:${{ github.event.release.tag_name }} \
+            --amend $IMAGE:${{ github.event.release.tag_name }}-amd64 \
+            --amend $IMAGE:${{ github.event.release.tag_name }}-arm64
+          docker manifest push $IMAGE:${{ github.event.release.tag_name }}
+
+          # Latest manifest
+          docker manifest create $IMAGE:latest \
+            --amend $IMAGE:latest-amd64 \
+            --amend $IMAGE:latest-arm64
+          docker manifest push $IMAGE:latest
