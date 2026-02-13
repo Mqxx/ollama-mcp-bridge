@@ -65,10 +65,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
-          tags: |
-            sha-${{ github.sha }}
-            ${{ github.event.release.tag_name }}
-            latest
+          # tags: |
+          #   sha-${{ github.sha }}
+          #   ${{ github.event.release.tag_name }}
+          #   latest
 
       - name: 'Build and push image'
         run: |
@@ -81,11 +81,6 @@ jobs:
             -t "${IMAGE}:${{ github.event.release.tag_name }}-${{ matrix.arch }}" \
             --push \
             .
-      
-      - name: 'Set image arch'
-        id: set-image-arch
-        run: |
-          echo "image_arch=${{ matrix.arch }}" >> $GITHUB_OUTPUT
           
     outputs:
       matrix: ${{ needs.define-matrix.outputs.matrix }}
