@@ -72,12 +72,15 @@ jobs:
 
       - name: 'Build and push image'
         run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
+          
           docker buildx build \
-            --platform ${{ matrix.platform }} \
-            --label ${{ steps.meta.outputs.labels }} \
-            -t ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:${{ github.sha }}-${{ matrix.arch }} \
-            -t ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:${{ github.event.release.tag_name }}-${{ matrix.arch }} \
-            --push .
+            --platform "${{ matrix.platform }}" \
+            --label "${{ steps.meta.outputs.labels }}" \
+            -t "${IMAGE}:${{ github.sha }}-${{ matrix.arch }}" \
+            -t "${IMAGE}:${{ github.event.release.tag_name }}-${{ matrix.arch }}" \
+            --push \
+            .
       
       - name: 'Set image arch'
         id: set-image-arch
