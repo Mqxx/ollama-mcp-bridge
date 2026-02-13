@@ -48,13 +48,13 @@ jobs:
             -t ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:${{ github.event.release.tag_name }}-${{ matrix.arch }} \
             --push .
       
-      - name: 'Set image tag'
-        id: set-image-tag
+      - name: 'Set image arch'
+        id: set-image-arch
         run: |
-          echo "image_tag=${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          echo "image_arch=${{ matrix.arch }}" >> $GITHUB_OUTPUT
           
     outputs:
-      image-arch: ${{ steps.set-image-tag.outputs.image_tag }}
+      image-arch: ${{ steps.set-image-arch.outputs.image_arch }}
       
   create-manifest:
     needs: [build-and-push]
@@ -66,40 +66,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: 'Create Multi-Arch Manifest'
         run: |
           IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
-          
-          docker buildx imagetools create \
-            -t $IMAGE:${{ github.event.release.tag_name }} \
-            -t $IMAGE:${{ github.event.release.tag_name }}-amd64 \
-            -t $IMAGE:${{ github.event.release.tag_name }}-arm64
-            
-          docker buildx imagetools create \
-            -t $IMAGE:latest \
-            -t $IMAGE:${{ github.sha }}-amd64 \
-            -t $IMAGE:${{ github.sha }}-arm64
 
-      # - name: 'Generate manifest dynamically'
-      #   run: |
-      #     IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
+          ARCHS=("${{ needs.build-and-push.outputs.image-arch }}")
 
-      #     # alle Arch-Tags aus den vorherigen Jobs sammeln
-      #     ARCHS=("${{ needs.build-and-push.outputs.image-arch }}")
+          IFS=',' read -r -a ARCH_ARRAY <<< "$ARCHS"
 
-      #     # Optional: falls mehrere Archs, Splitten auf Komma
-      #     IFS=',' read -r -a ARCH_ARRAY <<< "$ARCHS"
+          IMAGE_LIST=""
+          for arch in "${ARCH_ARRAY[@]}"; do
+            IMAGE_LIST="$IMAGE_LIST $IMAGE:${{ github.event.release.tag_name }}-$arch"
+          done
 
-      #     # Alle Images zusammensetzen
-      #     IMAGE_LIST=""
-      #     for arch in "${ARCH_ARRAY[@]}"; do
-      #       IMAGE_LIST="$IMAGE_LIST $IMAGE:${{ github.event.release.tag_name }}-$arch"
-      #     done
-
-      #     # Multi-Arch Manifest erstellen
-      #     docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $IMAGE_LIST
-      #     docker buildx imagetools create -t $IMAGE:latest $IMAGE_LIST
+          docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $IMAGE_LIST
+          docker buildx imagetools create -t $IMAGE:latest $IMAGE_LIST
           
   verify:
     name: 'Verify Multi-Arch Image'
