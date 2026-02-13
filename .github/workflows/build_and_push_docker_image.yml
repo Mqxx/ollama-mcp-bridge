@@ -9,8 +9,6 @@ on:
       - created
 
 env:
-  OWNER: ${{ github.repository_owner }}
-  RELEASE_TAG: ${{ github.event.release.tag_name }}
   DOCKER_IMAGE_NAME: 'ollama-mcp-bridge'
 
 jobs:
@@ -62,6 +60,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 'Lowercase Owner Name'
+        id: lowercase
+        run: |
+          echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
       - name: 'Build and push image (${{ matrix.platform }})'
         uses: docker/build-push-action@v6
         with:
@@ -70,9 +73,9 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ghcr.io/${{ env.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-${{ github.sha }}
-            ghcr.io/${{ env.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-${{ env.RELEASE_TAG }}
-            ghcr.io/${{ env.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-latest
+            ghcr.io/${{ steps.lowercase.outputs.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-${{ github.sha }}
+            ghcr.io/${{ steps.lowercase.outputs.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-${{ github.event.release.tag_name }}
+            ghcr.io/${{ steps.lowercase.outputs.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-latest
             
     outputs:
       matrix: ${{ needs.define-build.outputs.matrix }}
@@ -98,22 +101,22 @@ jobs:
         run: |
           MATRIX='${{ needs.build.outputs.matrix }}'
           
-          IMAGES_SHA=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:{}-${GITHUB_SHA}")
-          IMAGES_TAG=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:{}-${RELEASE_TAG}")
-          IMAGES_LATEST=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:{}-latest")
+          IMAGES_SHA=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:{}-${{ github.sha }}")
+          IMAGES_TAG=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:{}-${{ github.event.release.tag_name }}")
+          IMAGES_LATEST=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:{}-latest")
 
           echo "SHA images: $IMAGES_SHA"
           echo "TAG images: $IMAGES_TAG"
           echo "LATEST images: $IMAGES_LATEST"
           
-          docker manifest create ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA} $IMAGES_SHA
-          docker manifest push ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}
+          docker manifest create ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.sha }} $IMAGES_SHA
+          docker manifest push ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.sha }}
 
-          docker manifest create ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${RELEASE_TAG} $IMAGES_TAG
-          docker manifest push ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${RELEASE_TAG}
+          docker manifest create ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.event.release.tag_name }} $IMAGES_TAG
+          docker manifest push ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:${{ github.event.release.tag_name }}
 
-          docker manifest create ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:latest $IMAGES_LATEST
-          docker manifest push ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:latest
+          docker manifest create ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:latest $IMAGES_LATEST
+          docker manifest push ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:latest
           
     outputs:
       matrix: ${{ needs.build.outputs.matrix }}
@@ -127,7 +130,7 @@ jobs:
       - name: 'Verify'
         run: |
           ARCHS=$(echo '${{ needs.create-manifest.outputs.matrix }}' | jq -r '.[] | .arch')
-          OUTPUT=$(docker buildx imagetools inspect ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:latest)
+          OUTPUT=$(docker buildx imagetools inspect ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${DOCKER_IMAGE_NAME}:latest)
           
           echo "$OUTPUT"
           
