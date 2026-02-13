@@ -103,7 +103,7 @@ jobs:
           
   verify:
     name: 'Verify Multi-Arch Image'
-    needs: [build-and-push]
+    needs: [create-manifest]
     runs-on: ubuntu-22.04
     steps:
       - name: 'Inspect latest manifest'
