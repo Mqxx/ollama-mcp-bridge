@@ -25,18 +25,13 @@ jobs:
             platform: linux/arm64
 
     runs-on: ${{ matrix.os }}
-
     permissions:
       contents: read
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: 'Lowercase owner'
-        id: lowercase
-        run: |
-          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+      - name: 'Checkout repository'
+        uses: actions/checkout@v4
       
       - name: 'Docker login'
         uses: docker/login-action@v3
@@ -45,24 +40,67 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # - name: 'Docker meta'
-      #   id: meta
-      #   uses: docker/metadata-action@v5
-      #   with:
-      #     images: 'ghcr.io/${{ steps.lowercase.outputs.owner }}/${{ env.IMAGE_NAME }}'
-
       - name: 'Build and push image'
-        uses: docker/build-push-action@v6
+        run: |
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            -t ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:${{ github.sha }}-${{ matrix.arch }} \
+            -t ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}:${{ github.event.release.tag_name }}-${{ matrix.arch }} \
+            --push .
+      
+      - name: 'Set image tag'
+        id: set-image-tag
+        run: |
+          echo "image_tag=${{ matrix.arch }}" >> $GITHUB_OUTPUT
+          
+    outputs:
+      image-arch: ${{ steps.set-image-tag.outputs.image_tag }}
+      
+  create-manifest:
+    needs: [build-and-push]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 'Docker login'
+        uses: docker/login-action@v3
         with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          # labels: ${{ steps.meta.outputs.labels }}
-          push: true
-          tags: |
-            ghcr.io/${{ steps.lowercase.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ghcr.io/${{ steps.lowercase.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}
-            ghcr.io/${{ steps.lowercase.outputs.owner }}/${{ env.IMAGE_NAME }}:latest
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 'Create Multi-Arch Manifest'
+        run: |
+          IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
+          
+          docker buildx imagetools create \
+            -t $IMAGE:${{ github.event.release.tag_name }} \
+            -t $IMAGE:${{ github.event.release.tag_name }}-amd64 \
+            -t $IMAGE:${{ github.event.release.tag_name }}-arm64
+            
+          docker buildx imagetools create \
+            -t $IMAGE:latest \
+            -t $IMAGE:${{ github.sha }}-amd64 \
+            -t $IMAGE:${{ github.sha }}-arm64
 
+      # - name: 'Generate manifest dynamically'
+      #   run: |
+      #     IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
+
+      #     # alle Arch-Tags aus den vorherigen Jobs sammeln
+      #     ARCHS=("${{ needs.build-and-push.outputs.image-arch }}")
+
+      #     # Optional: falls mehrere Archs, Splitten auf Komma
+      #     IFS=',' read -r -a ARCH_ARRAY <<< "$ARCHS"
+
+      #     # Alle Images zusammensetzen
+      #     IMAGE_LIST=""
+      #     for arch in "${ARCH_ARRAY[@]}"; do
+      #       IMAGE_LIST="$IMAGE_LIST $IMAGE:${{ github.event.release.tag_name }}-$arch"
+      #     done
+
+      #     # Multi-Arch Manifest erstellen
+      #     docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $IMAGE_LIST
+      #     docker buildx imagetools create -t $IMAGE:latest $IMAGE_LIST
+          
   verify:
     name: 'Verify Multi-Arch Image'
     needs: [build-and-push]
