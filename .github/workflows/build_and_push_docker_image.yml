@@ -86,13 +86,15 @@ jobs:
             type=ref,event=tag
             type=raw,value=latest
 
-      - name: Create multi-arch manifests
+      - name: 'Create multi-arch manifests'
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/ollama-mcp-bridge"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
+          
           docker buildx imagetools create \
             --tag $IMAGE:latest \
             $IMAGE:amd64-latest \
             $IMAGE:arm64-latest
+            
           docker buildx imagetools push $IMAGE:latest
 
   verify:
