@@ -1,0 +1,140 @@
+name: 'Build and Push Docker Image'
+description: |
+  This workflow runs on every release.
+  It builds and publishes a new Docker image and pushes that image to the GitHub Container Registry (ghcr.io)
+
+on:
+  release:
+    types:
+      - created
+
+env:
+  OWNER: ${{ github.repository_owner }}
+  RELEASE_TAG: ${{ github.event.release.tag_name }}
+  DOCKER_IMAGE_NAME: 'ollama-mcp-bridge'
+
+jobs:
+  define-build:
+    name: 'Define Build'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Set Matrix'
+        id: matrix
+        run: |
+          echo "matrix=$(cat <<'EOF' | jq -c .
+            [
+              {
+                "arch": "amd64",
+                "os": "ubuntu-22.04",
+                "platform": "linux/amd64"
+              },
+              {
+                "arch": "arm64",
+                "os": "ubuntu-22.04-arm",
+                "platform": "linux/arm64"
+              }
+            ]
+          EOF)" >> "$GITHUB_OUTPUT"
+          
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+          
+  build:
+    strategy:
+      matrix:
+        include: ${{ fromJSON(needs.define-build.outputs.matrix) }}
+
+    name: 'Build ${{ matrix.platform }}'
+    runs-on: ${{ matrix.os }}
+    needs: ['define-build']
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 'Checkout repository'
+        uses: actions/checkout@v4
+
+      - name: 'Log in to GitHub Container Registry'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 'Build and push image (${{ matrix.platform }})'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: './Dockerfile'
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: |
+            ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${{ matrix.arch }}-${{ github.sha }}
+            ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${{ matrix.arch }}-${{ env.RELEASE_TAG }}
+            ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${{ matrix.arch }}-latest
+            
+    outputs:
+      matrix: ${{ needs.define-build.outputs.matrix }}
+      
+  create-manifest:
+    needs: ['build']
+    name: 'Create Manifest'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 'Log in to GitHub Container Registry'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 'Create and push multi-arch manifest'
+        run: |
+          MATRIX='${{ needs.build.outputs.matrix }}'
+          
+          IMAGES_SHA=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:{}-${GITHUB_SHA}")
+          IMAGES_TAG=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:{}-${RELEASE_TAG}")
+          IMAGES_LATEST=$(echo "$MATRIX" | jq -r '.[] | .arch' | xargs -n1 -I{} echo "ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:{}-latest")
+
+          echo "SHA images: $IMAGES_SHA"
+          echo "TAG images: $IMAGES_TAG"
+          echo "LATEST images: $IMAGES_LATEST"
+          
+          docker manifest create ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA} $IMAGES_SHA
+          docker manifest push ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${GITHUB_SHA}
+
+          docker manifest create ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${RELEASE_TAG} $IMAGES_TAG
+          docker manifest push ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${RELEASE_TAG}
+
+          docker manifest create ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:latest $IMAGES_LATEST
+          docker manifest push ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:latest
+          
+    outputs:
+      matrix: ${{ needs.build.outputs.matrix }}
+      
+  verify-manifest:
+    name: 'Verify Manifest'
+    runs-on: ubuntu-latest
+    needs: ['create-manifest']
+
+    steps:
+      - name: 'Verify'
+        run: |
+          ARCHS=$(echo '${{ needs.create-manifest.outputs.matrix }}' | jq -r '.[] | .arch')
+          OUTPUT=$(docker buildx imagetools inspect ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:latest)
+          
+          echo "$OUTPUT"
+          
+          for arch in $ARCHS; do
+            if ! echo "$OUTPUT" | grep -q "$arch"; then
+              echo -e "\x1b[1;31mPlatform $arch is missing in manifest."
+              exit 1
+            fi
+          done
+          echo -e "\x1b[1;32mAll expected platforms found in manifest."
