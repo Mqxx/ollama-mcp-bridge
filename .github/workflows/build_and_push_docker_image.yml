@@ -74,8 +74,10 @@ jobs:
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
           
+          echo "\"${{ matrix.platform }}\""
+          
           docker buildx build \
-            --platform "${{ matrix.platform }}" \
+            --platform ${{ matrix.platform }} \
             --label "${{ steps.meta.outputs.labels }}" \
             -t "${IMAGE}:${{ github.sha }}-${{ matrix.arch }}" \
             -t "${IMAGE}:${{ github.event.release.tag_name }}-${{ matrix.arch }}" \
@@ -96,42 +98,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: 'Create and push multi-arch manifest'
+      - name: 'Create Multi-Arch Manifest'
         run: |
           IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
-          TAG=${{ github.event.release.tag_name }}
           
           MATRIX_JSON='${{ needs.build-and-push.outputs.matrix }}'
+
           ARCHS=($(echo "$MATRIX_JSON" | jq -r '.[].arch'))
           
-          IMAGE_LIST=""
+          image_list=""
           for arch in "${ARCHS[@]}"; do
-            IMAGE_LIST="$IMAGE_LIST $IMAGE:$TAG-$arch"
+            image_list="$image_list $IMAGE:${{ github.event.release.tag_name }}-$arch"
           done
-          
-          docker manifest create $IMAGE:$TAG $IMAGE_LIST
-          docker manifest push $IMAGE:$TAG
-          
-          docker manifest create $IMAGE:latest $IMAGE_LIST
-          docker manifest push $IMAGE:latest
-      # - name: Create Multi-Arch Manifest
-      #   run: |
-      #     IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
-          
-      #     MATRIX_JSON='${{ needs.build-and-push.outputs.matrix }}'
+          image_list=$(echo $image_list | xargs)
 
-      #     ARCHS=($(echo "$MATRIX_JSON" | jq -r '.[].arch'))
+          echo "\"$image_list\""
           
-      #     image_list=""
-      #     for arch in "${ARCHS[@]}"; do
-      #       image_list="$image_list $IMAGE:${{ github.event.release.tag_name }}-$arch"
-      #     done
-      #     image_list=$(echo $image_list | xargs)
-
-      #     echo "\"$image_list\""
-          
-      #     docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $image_list
-      #     docker buildx imagetools create -t $IMAGE:latest $image_list
+          docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $image_list
+          docker buildx imagetools create -t $IMAGE:latest $image_list
     
     outputs:
       matrix: ${{ needs.build-and-push.outputs.matrix }}
