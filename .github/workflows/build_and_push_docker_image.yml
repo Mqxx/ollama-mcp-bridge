@@ -106,14 +106,18 @@ jobs:
           IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}
           
           MATRIX_JSON='${{ needs.build-and-push.outputs.matrix }}'
+
+          ARCHS=($(echo "$MATRIX_JSON" | jq -r '.[].arch'))
           
-          IMAGE_LIST=""
-          for ARCH in $(echo "$MATRIX_JSON" | jq -r '.[].arch'); do
-            IMAGE_LIST="$IMAGE_LIST $IMAGE:${{ github.event.release.tag_name }}-$ARCH"
+          image_list=""
+          for arch in "${ARCHS[@]}"; do
+            image_list="$image_list $IMAGE:${{ github.event.release.tag_name }}-$arch"
           done
+
+          echo "\"$image_list\""
           
-          docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $IMAGE_LIST
-          docker buildx imagetools create -t $IMAGE:latest $IMAGE_LIST
+          docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name }} $image_list
+          docker buildx imagetools create -t $IMAGE:latest $image_list
     
     outputs:
       matrix: ${{ needs.build-and-push.outputs.matrix }}
