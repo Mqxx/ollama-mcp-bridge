@@ -40,7 +40,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
+      - name: 'Docker metadata'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -50,7 +50,7 @@ jobs:
             type=ref,event=tag
             type=raw,value=latest
 
-      - name: Build & Push arch image
+      - name: 'Build & Push arch image'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -76,7 +76,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata
+      - name: 'Docker metadata'
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -86,17 +86,14 @@ jobs:
             type=ref,event=tag
             type=raw,value=latest
 
-      - name: Create and push manifests
+      - name: Create multi-arch manifests
         run: |
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${IMAGE_NAME}"
-
-          for TAG in ${{ steps.meta.outputs.version }} latest; do
-            docker manifest create $IMAGE:$TAG \
-              --amend $IMAGE:$TAG-amd64 \
-              --amend $IMAGE:$TAG-arm64
-
-            docker manifest push $IMAGE:$TAG
-          done
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/ollama-mcp-bridge"
+          docker buildx imagetools create \
+            --tag $IMAGE:latest \
+            $IMAGE:amd64-latest \
+            $IMAGE:arm64-latest
+          docker buildx imagetools push $IMAGE:latest
 
   verify:
     name: 'Verify'
