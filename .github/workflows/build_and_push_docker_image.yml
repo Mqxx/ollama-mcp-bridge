@@ -70,9 +70,9 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${{ matrix.arch }}-${{ github.sha }}
-            ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${{ matrix.arch }}-${{ env.RELEASE_TAG }}
-            ghcr.io/${OWNER}/${DOCKER_IMAGE_NAME}:${{ matrix.arch }}-latest
+            ghcr.io/${{ env.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-${{ env.RELEASE_TAG }}
+            ghcr.io/${{ env.OWNER }}/${{ env.DOCKER_IMAGE_NAME }}:${{ matrix.arch }}-latest
             
     outputs:
       matrix: ${{ needs.define-build.outputs.matrix }}
