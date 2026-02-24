@@ -78,6 +78,7 @@ jobs:
             --platform ${{ matrix.platform }} \
             -t "${IMAGE}:${{ github.sha }}-${{ matrix.arch }}" \
             -t "${IMAGE}:${{ github.event.release.tag_name || inputs.tag_name }}-${{ matrix.arch }}" \
+            -t "${IMAGE}:latest-${{ matrix.arch }}" \
             --push \
             .
           
@@ -115,6 +116,7 @@ jobs:
 
           echo "\"$image_list\""
           
+          docker buildx imagetools create -t $IMAGE:${{ github.sha }} $image_list
           docker buildx imagetools create -t $IMAGE:${{ github.event.release.tag_name || inputs.tag_name }} $image_list
           docker buildx imagetools create -t $IMAGE:latest $image_list
     
